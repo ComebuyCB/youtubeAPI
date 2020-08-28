@@ -3,13 +3,13 @@
 
 <head>
     <meta charset="utf-8">
-    <title></title>
+    <title>youtubeAPI</title>
     <link rel="shortcut Icon" type="image/x-icon" href="">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <link href="htts://vjs.zencdn.net/5.19/video-js.min.css" rel="stylesheet">
-    <script src="htts://vjs.zencdn.net/5.19/video.min.js"></script>
+    <link href="https://vjs.zencdn.net/7.8.4/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/7.8.4/video.js"></script>
     <link href="common.css" rel="stylesheet">
 </head>
 
@@ -45,15 +45,17 @@
         const youtubeAPI = 'https://www.googleapis.com/youtube/v3/videos' +
             // '?part=snippet,contentDetails,id,liveStreamingDetails,statistics,status' +
             '?part=snippet,contentDetails,id' +
+            '&regionCode=tw' +
             '&chart=mostPopular' +
             '&maxResults=50' +
             '&key=AIzaSyBP-Du-hT1dfrn7JikjtPr6eqfSjtJlUy0'
 
-        let AllVideoItems = [];
+        let gAllVideoItems = [];
+        let gShowPaneId = 'video_default'
+        const gShowPerPage = 12;
 
         $(function () {
-            getVideoData('', '#video_default');
-            getVideoItems( youtubeAPI )
+            getVideoItems(youtubeAPI, true)
 
             var testurl = "https://www.googleapis.com/youtube/v3/videos" +
                 "?id=V0TMHRijVDw,aTS9n_m7TW0" +
@@ -66,56 +68,42 @@
             tab();
         })
 
-        function getVideoItems( url, firstLoading ){
-            $.get( url, function (res) {
-                let nextPageToken = res.nextPageToken ? res.nextPageToken : false
-                
-                let items = res.items
-                AllVideoItems = AllVideoItems.concat(items)
+        // 打Ajax
+        function getVideoItems(url, firstLoading) {
+            $('#' + gShowPaneId).addClass('loading');
+            $.get(url, function (res) {
+                // 將拿到的 items 合併到 gAllVideoItems 儲存
+                gAllVideoItems = gAllVideoItems.concat(res.items)
 
-                if (nextPageToken){
+                // 第一次打API
+                // if (firstLoading) {
+                //     gTotalVideoItems = res.pageInfo.totalResults
+                // }
+
+                // 是否還有下一個API?
+                // let nextPageToken = res.nextPageToken ? res.nextPageToken : false
+                // if (nextPageToken) {
+                //     let newUrl = youtubeAPI + '&pageToken=' + nextPageToken
+                //     getVideoItems(newUrl)
+                // } else {
+                //     render_VideoPane(1)
+                //     console.log(gAllVideoItems)
+                // }
+
+                // 配合100筆
+                if (firstLoading) {
+                    let nextPageToken = res.nextPageToken ? res.nextPageToken : false
                     let newUrl = youtubeAPI + '&pageToken=' + nextPageToken
-                    getVideoItems( newUrl )
-                }else{
-                    console.log( AllVideoItems )
+                    getVideoItems(newUrl)
+                } else {
+                    render_VideoPane(1)
+                    console.log(gAllVideoItems)
                 }
             })
         }
 
-        // 按下收藏按紐時
-        function clickCollect(self) {
-
-            let vid = $(self).closest('.video_card').attr('id')
-            let ls = localStorage.getItem('collectId')
-            let newCollectArray = [];
-
-            if (ls) {
-                ls = JSON.parse(ls);
-
-                let added = true;
-                ls.forEach((ele, idx) => {
-                    console.log(vid, ele, idx)
-                    if (vid === ele) {
-                        $(self).removeClass('added')
-                        ls.splice(idx, 1);
-                        added = false;
-                    }
-                });
-                if (added) {
-                    $(self).addClass('added')
-                    newCollectArray = ls.push(vid)
-                }
-
-            } else { // first click;
-                ls = [vid];
-                $(self).addClass('added')
-            }
-
-            localStorage.setItem('collectId', JSON.stringify(ls))
-        }
-
-        // 輸出 -- 視頻清單
-        function layout_VideoList(resData) {
+        // 回傳html -- 視頻清單
+        function layout_VideoList(nowPage) {
             let htmlLayout = "";
             let ls = localStorage.getItem('collectId') // 收藏array;
             if (ls) {
@@ -123,8 +111,15 @@
             } else {
                 ls = [];
             }
+            let startItem = gShowPerPage * (nowPage - 1)
+            let endItem = gAllVideoItems.length < (startItem + gShowPerPage) ?
+                gAllVideoItems.length :
+                startItem + gShowPerPage
 
-            ; (resData.items).forEach(ele => {
+            for (let i = startItem; i < endItem; i++) {
+
+                let ele = gAllVideoItems[i]
+                // videoItems.forEach(ele => { 替代
                 let vid = ele.id
                 let snippet = ele.snippet
                 let title = snippet.localized.title
@@ -159,56 +154,105 @@
                         </div>
                     </div>
                 `
-            });
+            };
+
             return htmlLayout;
         }
 
-        // 輸出 -- 頁籤
-        function layout_Pagination(resData) {
+        // 回傳html -- 頁籤
+        function layout_Pagination(nowPage) {
+            let minPage = 1;
+            let maxPage = Math.ceil(gAllVideoItems.length / gShowPerPage); // 無條件進位
 
-            let total = resData.pageInfo.totalResults;
+            let minPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${minPage})">${minPage}</button>`
+            let maxPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${maxPage})">${maxPage}</button>`
 
-            let prevPageToken = resData.prevPageToken ? resData.prevPageToken : false;
-            let prevPageHtml = prevPageToken ?
-                `<button class="btn page-btn" onclick="getVideoData('${prevPageToken}','')">prev</button>` :
-                `<button class="btn page-btn" disabled>prev</button>`
+            let prevPageHtml = (nowPage === minPage) ?
+                `<button class="btn page-btn" disabled>prev</button>` :
+                `<button class="btn page-btn" onclick="render_VideoPane(${nowPage - 1})">prev</button>`
 
-            let nextPageToken = resData.nextPageToken ? resData.nextPageToken : false;
-            let nextPageHtml = nextPageToken ?
-                `<button class="btn page-btn" onclick="getVideoData('${nextPageToken}','')">next</button>` :
-                `<button class="btn page-btn" disabled>next</button>`
+            let nextPageHtml = (nowPage === maxPage) ?
+                `<button class="btn page-btn" disabled>next</button>` :
+                `<button class="btn page-btn" onclick="render_VideoPane(${nowPage + 1})">next</button>`
+
+            let fivePagesHtml = ''
+            let fivePages_first = nowPage - 2;
+
+            for (let i = -2; i <= 2; i++) {
+                if (nowPage + i < minPage) {
+                    fivePages_first++;
+                }
+                if (nowPage + i > maxPage) {
+                    fivePages_first--;
+                }
+            }
+
+            for (let i = 0; i < 5; i++) {
+                if (fivePages_first + i === nowPage) {
+                    fivePagesHtml += `<button class="btn page-btn active">${fivePages_first + i}</button>`
+                } else {
+                    fivePagesHtml += `<button class="btn page-btn" onclick="render_VideoPane(${fivePages_first + i})">${fivePages_first + i}</button>`
+                }
+            }
 
             let htmlLayout = `
+                ${minPageHtml}
                 ${prevPageHtml}
+                ${fivePagesHtml}
                 ${nextPageHtml}
+                ${maxPageHtml}
             `
             return htmlLayout;
         }
 
-        // 打Ajax取得videoData並輸出
-        function getVideoData(pageToken, target) {
-            let nextUrl = pageToken ?
-                youtubeAPI + '&pageToken=' + pageToken :
-                youtubeAPI
+        // 畫面輸出 -- 視頻清單 + 頁籤
+        function render_VideoPane(page) {
+            $('#' + gShowPaneId).addClass('loading');
 
-            $(target).addClass('loading');
-            $.get(nextUrl, function (res) {
-                console.log(res);
+            let video_default_Html = layout_VideoList(page);
+            $('#' + gShowPaneId + ' > .video-row').html(video_default_Html);
 
-                let video_default_Html = layout_VideoList(res);
-                $(target + ' > .video-row').html(video_default_Html);
+            let video_default_pagination = layout_Pagination(page);
+            $('#' + gShowPaneId + ' > .pagination').html(video_default_pagination);
 
-                let video_default_pagination = layout_Pagination(res);
-                $(target + ' > .pagination').html(video_default_pagination);
-
-                $(target).removeClass('loading');
-            })
+            $('#' + gShowPaneId).removeClass('loading');
         }
 
-        // 
+        // 按下收藏按紐時
+        function clickCollect(self) {
+            let vid = $(self).closest('.video_card').attr('id')
+            let ls = localStorage.getItem('collectId')
+            let newCollectArray = [];
+
+            if (ls) {
+                ls = JSON.parse(ls);
+
+                let added = true;
+                ls.forEach((ele, idx) => {
+                    if (vid === ele) {
+                        $(self).removeClass('added')
+                        ls.splice(idx, 1);
+                        added = false;
+                    }
+                });
+                if (added) {
+                    $(self).addClass('added')
+                    newCollectArray = ls.push(vid)
+                }
+
+            } else { // first click;
+                ls = [vid];
+                $(self).addClass('added')
+            }
+
+            localStorage.setItem('collectId', JSON.stringify(ls))
+        }
+
+        // tab切換
         function tab() {
             $('.tab-btn').on('click', function () {
                 let target = $(this).attr('tab-target');
+                gShowPaneId = target;
 
                 $('.tab-btn').removeClass('active');
                 $(this).addClass('active');
@@ -218,14 +262,6 @@
             })
         }
 
-        // function localStorage() {
-        //     // 存入資料：setItem()
-        //     localStorage.setItem(key, value);
-        //     // 取出資料：getItem()
-        //     localStorage.getItem(key);
-        //     // 移除資料：removeItem()
-        //     localStorage.removeItem(key);
-        // }
     </script>
 </body>
 
