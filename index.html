@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title></title>
+    <link rel="shortcut Icon" type="image/x-icon" href="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <link href="htts://vjs.zencdn.net/5.19/video-js.min.css" rel="stylesheet">
+    <script src="htts://vjs.zencdn.net/5.19/video.min.js"></script>
+    <link href="common.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <div class="video-container">
+            <div class="tab-nav" tab-group="videoList">
+                <button class="tab-btn btn active" tab-target="video_default">Default</button>
+                <button class="tab-btn btn" tab-target="video_collect">Collect</button>
+            </div>
+            <div class="tab-content" tab-group="videoList">
+                <div id="video_default" class="tab-pane">
+                    <div class="video-row"></div>
+                    <div class="pagination"></div>
+                </div>
+                <div id="video_collect" class="tab-pane">
+                    <div class="video-row"></div>
+                    <div class="pagination"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let url = new URL(window.location.href)
+        let searchParams = new URLSearchParams(url.search)
+
+        if (searchParams.has('page')) {
+            console.log(searchParams.get('page'))
+        }
+
+        // defaultAPI
+        const youtubeAPI = 'https://www.googleapis.com/youtube/v3/videos' +
+            // '?part=snippet,contentDetails,id,liveStreamingDetails,statistics,status' +
+            '?part=snippet,contentDetails,id' +
+            '&chart=mostPopular' +
+            '&maxResults=50' +
+            '&key=AIzaSyBP-Du-hT1dfrn7JikjtPr6eqfSjtJlUy0'
+
+        let AllVideoItems = [];
+
+        $(function () {
+            getVideoData('', '#video_default');
+            getVideoItems( youtubeAPI )
+
+            var testurl = "https://www.googleapis.com/youtube/v3/videos" +
+                "?id=V0TMHRijVDw,aTS9n_m7TW0" +
+                "&key=AIzaSyBP-Du-hT1dfrn7JikjtPr6eqfSjtJlUy0" +
+                "&part=snippet"
+            $.get(testurl, function (res) {
+                console.log(res);
+            })
+
+            tab();
+        })
+
+        function getVideoItems( url, firstLoading ){
+            $.get( url, function (res) {
+                let nextPageToken = res.nextPageToken ? res.nextPageToken : false
+                
+                let items = res.items
+                AllVideoItems = AllVideoItems.concat(items)
+
+                if (nextPageToken){
+                    let newUrl = youtubeAPI + '&pageToken=' + nextPageToken
+                    getVideoItems( newUrl )
+                }else{
+                    console.log( AllVideoItems )
+                }
+            })
+        }
+
+        // 按下收藏按紐時
+        function clickCollect(self) {
+
+            let vid = $(self).closest('.video_card').attr('id')
+            let ls = localStorage.getItem('collectId')
+            let newCollectArray = [];
+
+            if (ls) {
+                ls = JSON.parse(ls);
+
+                let added = true;
+                ls.forEach((ele, idx) => {
+                    console.log(vid, ele, idx)
+                    if (vid === ele) {
+                        $(self).removeClass('added')
+                        ls.splice(idx, 1);
+                        added = false;
+                    }
+                });
+                if (added) {
+                    $(self).addClass('added')
+                    newCollectArray = ls.push(vid)
+                }
+
+            } else { // first click;
+                ls = [vid];
+                $(self).addClass('added')
+            }
+
+            localStorage.setItem('collectId', JSON.stringify(ls))
+        }
+
+        // 輸出 -- 視頻清單
+        function layout_VideoList(resData) {
+            let htmlLayout = "";
+            let ls = localStorage.getItem('collectId') // 收藏array;
+            if (ls) {
+                ls = JSON.parse(ls);
+            } else {
+                ls = [];
+            }
+
+            ; (resData.items).forEach(ele => {
+                let vid = ele.id
+                let snippet = ele.snippet
+                let title = snippet.localized.title
+                let desc = snippet.localized.description
+
+                let img = snippet.thumbnails.default.url
+                if (snippet.thumbnails.standard) {
+                    img = snippet.thumbnails.standard.url
+                }
+
+                let added = ''; // collected or not;
+                if (ls) {
+                    ls.forEach((ele, idx) => {
+                        if (vid === ele) {
+                            added = 'added';
+                        }
+                    });
+                }
+
+                htmlLayout += `
+                    <div class="video-col">
+                        <div id="${vid}" class="video_card">
+                            <div class="video_img">
+                                <img class="img" src="${img}">
+                                <div class="btn collect ${added}" onclick="clickCollect(this);"><i class="fa fa-star"></i></div>
+                                <div class="timeLength">12:34</div>
+                            </div>
+                            <div class="video_desc">
+                                <div class="title text-more2">${title}</div>
+                                <div class="desc text-more2">${desc}</div>
+                            </div>
+                        </div>
+                    </div>
+                `
+            });
+            return htmlLayout;
+        }
+
+        // 輸出 -- 頁籤
+        function layout_Pagination(resData) {
+
+            let total = resData.pageInfo.totalResults;
+
+            let prevPageToken = resData.prevPageToken ? resData.prevPageToken : false;
+            let prevPageHtml = prevPageToken ?
+                `<button class="btn page-btn" onclick="getVideoData('${prevPageToken}','')">prev</button>` :
+                `<button class="btn page-btn" disabled>prev</button>`
+
+            let nextPageToken = resData.nextPageToken ? resData.nextPageToken : false;
+            let nextPageHtml = nextPageToken ?
+                `<button class="btn page-btn" onclick="getVideoData('${nextPageToken}','')">next</button>` :
+                `<button class="btn page-btn" disabled>next</button>`
+
+            let htmlLayout = `
+                ${prevPageHtml}
+                ${nextPageHtml}
+            `
+            return htmlLayout;
+        }
+
+        // 打Ajax取得videoData並輸出
+        function getVideoData(pageToken, target) {
+            let nextUrl = pageToken ?
+                youtubeAPI + '&pageToken=' + pageToken :
+                youtubeAPI
+
+            $(target).addClass('loading');
+            $.get(nextUrl, function (res) {
+                console.log(res);
+
+                let video_default_Html = layout_VideoList(res);
+                $(target + ' > .video-row').html(video_default_Html);
+
+                let video_default_pagination = layout_Pagination(res);
+                $(target + ' > .pagination').html(video_default_pagination);
+
+                $(target).removeClass('loading');
+            })
+        }
+
+        // 
+        function tab() {
+            $('.tab-btn').on('click', function () {
+                let target = $(this).attr('tab-target');
+
+                $('.tab-btn').removeClass('active');
+                $(this).addClass('active');
+
+                $('.tab-pane').fadeOut('fast');
+                $('#' + target).fadeIn('fast');
+            })
+        }
+
+        // function localStorage() {
+        //     // 存入資料：setItem()
+        //     localStorage.setItem(key, value);
+        //     // 取出資料：getItem()
+        //     localStorage.getItem(key);
+        //     // 移除資料：removeItem()
+        //     localStorage.removeItem(key);
+        // }
+    </script>
+</body>
+
+</html>
