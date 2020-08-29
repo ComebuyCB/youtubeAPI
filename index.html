@@ -94,25 +94,10 @@
 
         // 打default Ajax
         function getDefaultVideoItems_andRender(tabObj, apiUrl, firstLoading) {
-            $('#' + tabObj.showPaneId).addClass('loading');
+            $('#' + tabObj['showPaneId']).addClass('loading');
             $.get(apiUrl, function (res) {
                 // 將拿到的 items 合併到 gAllVideoItems 儲存
                 tabObj['videoItems'] = tabObj['videoItems'].concat(res.items)
-
-                // 第一次打API
-                // if (firstLoading) {
-                //     gTotalVideoItems = res.pageInfo.totalResults
-                // }
-
-                // 是否還有下一個API?
-                // let nextPageToken = res.nextPageToken ? res.nextPageToken : false
-                // if (nextPageToken) {
-                //     let newUrl = youtubeAPI + '&pageToken=' + nextPageToken
-                //     getVideoItems(newUrl)
-                // } else {
-                //     render_VideoPane(1)
-                //     console.log(gAllVideoItems)
-                // }
 
                 // 配合100筆
                 if (firstLoading) {
@@ -122,7 +107,7 @@
                 } else {
                     console.log(tabObj['videoItems'])
                     render_VideoPane(tabObj, 1)
-                    $('#' + tabObj.showPaneId).removeClass('loading');
+                    $('#' + tabObj['showPaneId']).removeClass('loading');
                 }
             })
         }
@@ -198,37 +183,79 @@
 
         // 回傳html -- 頁籤
         function layout_Pagination(tabObj, nowPage) {
+
+            let tabObjInHtml = ''
+            if (tabObj.showPaneId == 'video_default') {
+                tabObjInHtml = 'defaultObj'
+            } else {
+                tabObjInHtml = 'collectObj'
+            }
+
             let minPage = 1;
             let maxPage = Math.ceil(tabObj['videoItems'].length / gShowPerPage); // 無條件進位
 
-            let minPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${minPage})">${minPage}</button>`
-            let maxPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${maxPage})">${maxPage}</button>`
+            let minPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${tabObjInHtml},${minPage})">${minPage}</button>`
+            let maxPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${tabObjInHtml},${maxPage})">${maxPage}</button>`
 
             let prevPageHtml = (nowPage === minPage) ?
                 `<button class="btn page-btn" disabled>prev</button>` :
-                `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${nowPage - 1})">prev</button>`
+                `<button class="btn page-btn" onclick="render_VideoPane(${tabObjInHtml},${nowPage - 1})">prev</button>`
 
             let nextPageHtml = (nowPage === maxPage) ?
                 `<button class="btn page-btn" disabled>next</button>` :
-                `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${nowPage + 1})">next</button>`
+                `<button class="btn page-btn" onclick="render_VideoPane(${tabObjInHtml},${nowPage + 1})">next</button>`
 
             let fivePagesHtml = ''
             let fivePages_first = nowPage - 2;
 
-            for (let i = -2; i <= 2; i++) {
-                if (nowPage + i < minPage) {
-                    fivePages_first++;
-                }
-                if (nowPage + i > maxPage) {
-                    fivePages_first--;
-                }
+
+            let maxChoosePages = 5;
+            if (maxChoosePages > maxPage) {
+                maxChoosePages = maxPage
             }
 
-            for (let i = 0; i < 5; i++) {
-                if (fivePages_first + i === nowPage) {
-                    fivePagesHtml += `<button class="btn page-btn active">${fivePages_first + i}</button>`
+            let fiveObj = {
+                max: nowPage,
+                min: nowPage,
+                hasAdd: false,
+                stat: 'minus'
+            }
+
+            for (i = 0; i < maxChoosePages; i++) {
+                fiveObj = add_p(fiveObj);
+                fiveObj = add_p(fiveObj);
+                fiveObj.hasAdd = false;
+            }
+
+            function add_p(o) {
+                if (o.hasAdd === true) { return o } 
+
+                if (o.stat === 'minus') {
+                    
+                    if (nowPage - (nowPage - o.min + 1) >= minPage) { //成功左加
+                        o.hasAdd = true;
+                        o.min = nowPage - (nowPage - o.min + 1);
+                    }
+                    o.stat = 'plus';
+
+                } else if (o.stat === 'plus') {
+                    
+                    if (nowPage - (nowPage - o.max - 1) <= maxPage) { //成功右加
+                        o.hasAdd = true;
+                        o.max = nowPage - (nowPage - o.max - 1);
+                    }
+                    o.stat = 'minus';
+
+                }
+
+                return o;
+            }
+
+            for (i = fiveObj.min; i <= fiveObj.max; i++) {
+                if (i === nowPage) {
+                    fivePagesHtml += `<button class="btn page-btn active">${i}</button>`
                 } else {
-                    fivePagesHtml += `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${fivePages_first + i})">${fivePages_first + i}</button>`
+                    fivePagesHtml += `<button class="btn page-btn" onclick="render_VideoPane(${tabObjInHtml},${i})">${i}</button>`
                 }
             }
 
