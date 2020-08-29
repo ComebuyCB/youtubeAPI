@@ -18,7 +18,8 @@
         <div class="video-container">
             <div class="tab-nav" tab-group="videoList">
                 <button class="tab-btn btn active" tab-target="video_default">Default</button>
-                <button class="tab-btn btn" tab-target="video_collect">Collect</button>
+                <button class="tab-btn btn" tab-target="video_collect"
+                    onclick="getCollectVideoItems_andRender(collectObj)">Collect</button>
             </div>
             <div class="tab-content" tab-group="videoList">
                 <div id="video_default" class="tab-pane">
@@ -34,46 +35,69 @@
     </div>
 
     <script>
-        let url = new URL(window.location.href)
-        let searchParams = new URLSearchParams(url.search)
+        let gTab = checkStartTab()
+        function checkStartTab() {
+            let url = new URL(window.location.href)
+            let searchParams = new URLSearchParams(url.search)
 
-        if (searchParams.has('page')) {
-            console.log(searchParams.get('page'))
+            if (searchParams.has('tab')) {
+                let str = searchParams.get('tab')
+                return str
+            }
+            return ''
         }
 
-        // defaultAPI
-        const youtubeAPI = 'https://www.googleapis.com/youtube/v3/videos' +
-            // '?part=snippet,contentDetails,id,liveStreamingDetails,statistics,status' +
-            '?part=snippet,contentDetails,id' +
-            '&regionCode=tw' +
-            '&chart=mostPopular' +
-            '&maxResults=50' +
-            '&key=AIzaSyBP-Du-hT1dfrn7JikjtPr6eqfSjtJlUy0'
+        let defaultObj = {
+            api: 'https://www.googleapis.com/youtube/v3/videos' +
+                // '?part=snippet,contentDetails,id,liveStreamingDetails,statistics,status' +
+                '?part=snippet,contentDetails,id' +
+                '&regionCode=tw' +
+                '&chart=mostPopular' +
+                '&maxResults=50' +
+                '&key=AIzaSyBP-Du-hT1dfrn7JikjtPr6eqfSjtJlUy0',
+            showPaneId: 'video_default',
+            videoItems: [],
+        }
 
-        let gAllVideoItems = [];
-        let gShowPaneId = 'video_default'
+        let collectObj = {
+            api: getCollectAPI(),
+            showPaneId: 'video_collect',
+            videoItems: []
+        }
+
         const gShowPerPage = 12;
 
+        function getCollectAPI() {
+            let ls = localStorage.getItem('collectId') // 收藏array;
+            if (ls && ls.length > 0) {
+                let idStr = '';
+                ls = JSON.parse(ls);
+                ls.forEach(ele => {
+                    idStr += ',' + ele
+                })
+                idStr = idStr.substring(1)
+                return ('https://www.googleapis.com/youtube/v3/videos' +
+                    '?id=' + idStr +
+                    '&key=AIzaSyBP-Du-hT1dfrn7JikjtPr6eqfSjtJlUy0' +
+                    '&part=snippet,contentDetails,id')
+            }
+        }
+
         $(function () {
-            getVideoItems(youtubeAPI, true)
-
-            var testurl = "https://www.googleapis.com/youtube/v3/videos" +
-                "?id=V0TMHRijVDw,aTS9n_m7TW0" +
-                "&key=AIzaSyBP-Du-hT1dfrn7JikjtPr6eqfSjtJlUy0" +
-                "&part=snippet"
-            $.get(testurl, function (res) {
-                console.log(res);
-            })
-
+            if (gTab == '') {
+                getDefaultVideoItems_andRender(defaultObj, defaultObj.api, true)
+            } else if (gTab == 'collect') {
+                getCollectVideoItems_andRender(collectObj)
+            }
             tab();
         })
 
-        // 打Ajax
-        function getVideoItems(url, firstLoading) {
-            $('#' + gShowPaneId).addClass('loading');
-            $.get(url, function (res) {
+        // 打default Ajax
+        function getDefaultVideoItems_andRender(tabObj, apiUrl, firstLoading) {
+            $('#' + tabObj.showPaneId).addClass('loading');
+            $.get(apiUrl, function (res) {
                 // 將拿到的 items 合併到 gAllVideoItems 儲存
-                gAllVideoItems = gAllVideoItems.concat(res.items)
+                tabObj['videoItems'] = tabObj['videoItems'].concat(res.items)
 
                 // 第一次打API
                 // if (firstLoading) {
@@ -93,17 +117,29 @@
                 // 配合100筆
                 if (firstLoading) {
                     let nextPageToken = res.nextPageToken ? res.nextPageToken : false
-                    let newUrl = youtubeAPI + '&pageToken=' + nextPageToken
-                    getVideoItems(newUrl)
+                    let newUrl = tabObj.api + '&pageToken=' + nextPageToken
+                    getDefaultVideoItems_andRender(tabObj, newUrl)
                 } else {
-                    render_VideoPane(1)
-                    console.log(gAllVideoItems)
+                    console.log(tabObj['videoItems'])
+                    render_VideoPane(tabObj, 1)
+                    $('#' + tabObj.showPaneId).removeClass('loading');
                 }
             })
         }
 
+        function getCollectVideoItems_andRender(tabObj) {
+            $('#' + tabObj['showPaneId']).addClass('loading');
+            tabObj.api = getCollectAPI()
+            $.get(tabObj.api, function (res) {
+                tabObj['videoItems'] = res.items;
+                console.log(tabObj['videoItems'])
+                render_VideoPane(tabObj, 1)
+                $('#' + tabObj['showPaneId']).removeClass('loading');
+            })
+        }
+
         // 回傳html -- 視頻清單
-        function layout_VideoList(nowPage) {
+        function layout_VideoList(tabObj, nowPage) {
             let htmlLayout = "";
             let ls = localStorage.getItem('collectId') // 收藏array;
             if (ls) {
@@ -112,14 +148,15 @@
                 ls = [];
             }
             let startItem = gShowPerPage * (nowPage - 1)
-            let endItem = gAllVideoItems.length < (startItem + gShowPerPage) ?
-                gAllVideoItems.length :
+            let endItem = tabObj['videoItems'].length < (startItem + gShowPerPage) ?
+                tabObj['videoItems'].length :
                 startItem + gShowPerPage
 
             for (let i = startItem; i < endItem; i++) {
 
-                let ele = gAllVideoItems[i]
+                let ele = tabObj['videoItems'][i]
                 // videoItems.forEach(ele => { 替代
+                let duration = convertISO8601ToTime(ele.contentDetails.duration)
                 let vid = ele.id
                 let snippet = ele.snippet
                 let title = snippet.localized.title
@@ -145,7 +182,7 @@
                             <div class="video_img">
                                 <img class="img" src="${img}">
                                 <div class="btn collect ${added}" onclick="clickCollect(this);"><i class="fa fa-star"></i></div>
-                                <div class="timeLength">12:34</div>
+                                <div class="timeLength">${duration}</div>
                             </div>
                             <div class="video_desc">
                                 <div class="title text-more2">${title}</div>
@@ -160,20 +197,20 @@
         }
 
         // 回傳html -- 頁籤
-        function layout_Pagination(nowPage) {
+        function layout_Pagination(tabObj, nowPage) {
             let minPage = 1;
-            let maxPage = Math.ceil(gAllVideoItems.length / gShowPerPage); // 無條件進位
+            let maxPage = Math.ceil(tabObj['videoItems'].length / gShowPerPage); // 無條件進位
 
-            let minPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${minPage})">${minPage}</button>`
-            let maxPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${maxPage})">${maxPage}</button>`
+            let minPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${minPage})">${minPage}</button>`
+            let maxPageHtml = `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${maxPage})">${maxPage}</button>`
 
             let prevPageHtml = (nowPage === minPage) ?
                 `<button class="btn page-btn" disabled>prev</button>` :
-                `<button class="btn page-btn" onclick="render_VideoPane(${nowPage - 1})">prev</button>`
+                `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${nowPage - 1})">prev</button>`
 
             let nextPageHtml = (nowPage === maxPage) ?
                 `<button class="btn page-btn" disabled>next</button>` :
-                `<button class="btn page-btn" onclick="render_VideoPane(${nowPage + 1})">next</button>`
+                `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${nowPage + 1})">next</button>`
 
             let fivePagesHtml = ''
             let fivePages_first = nowPage - 2;
@@ -191,7 +228,7 @@
                 if (fivePages_first + i === nowPage) {
                     fivePagesHtml += `<button class="btn page-btn active">${fivePages_first + i}</button>`
                 } else {
-                    fivePagesHtml += `<button class="btn page-btn" onclick="render_VideoPane(${fivePages_first + i})">${fivePages_first + i}</button>`
+                    fivePagesHtml += `<button class="btn page-btn" onclick="render_VideoPane(${tabObj},${fivePages_first + i})">${fivePages_first + i}</button>`
                 }
             }
 
@@ -206,16 +243,12 @@
         }
 
         // 畫面輸出 -- 視頻清單 + 頁籤
-        function render_VideoPane(page) {
-            $('#' + gShowPaneId).addClass('loading');
+        function render_VideoPane(tabObj, page) {
+            let video_default_Html = layout_VideoList(tabObj, page);
+            $('#' + tabObj.showPaneId + ' > .video-row').html(video_default_Html);
 
-            let video_default_Html = layout_VideoList(page);
-            $('#' + gShowPaneId + ' > .video-row').html(video_default_Html);
-
-            let video_default_pagination = layout_Pagination(page);
-            $('#' + gShowPaneId + ' > .pagination').html(video_default_pagination);
-
-            $('#' + gShowPaneId).removeClass('loading');
+            let video_default_pagination = layout_Pagination(tabObj, page);
+            $('#' + tabObj.showPaneId + ' > .pagination').html(video_default_pagination);
         }
 
         // 按下收藏按紐時
@@ -248,11 +281,31 @@
             localStorage.setItem('collectId', JSON.stringify(ls))
         }
 
+        function convertISO8601ToTime(input) {
+            var reg = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/;
+            var hours = '', minutes = '0:', seconds = '', time;
+            if (reg.test(input)) {
+                var matches = reg.exec(input);
+                if (matches[1]) hours = paddingZero(matches[1]) + ':';
+                if (matches[2]) minutes = paddingZero(matches[2]) + ':';
+                if (matches[3]) seconds = paddingZero(matches[3]);
+                time = hours + minutes + seconds;
+            }
+
+            function paddingZero(num) {
+                if (num < 10) {
+                    num = '0' + num;
+                    return num
+                }
+                return num
+            }
+            return time;
+        }
+
         // tab切換
         function tab() {
             $('.tab-btn').on('click', function () {
                 let target = $(this).attr('tab-target');
-                gShowPaneId = target;
 
                 $('.tab-btn').removeClass('active');
                 $(this).addClass('active');
