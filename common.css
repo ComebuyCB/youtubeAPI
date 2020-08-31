@@ -62,6 +62,7 @@ body { margin: 0; background-color: #222; }
 .tab-btn.active { color: #fff; background-color: #666; border: 1px solid white; }
 
 .tab-content { position: relative; }
+.tab-pane { color: #eee;}
 .tab-pane.loading::after {
     content: "";
     position: absolute;

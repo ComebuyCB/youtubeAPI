@@ -67,6 +67,7 @@
 
         const gShowPerPage = 12;
 
+
         function getCollectAPI() {
             let ls = localStorage.getItem('collectId') // 收藏array;
             if (ls && ls.length > 0) {
@@ -94,33 +95,59 @@
 
         // 打default Ajax
         function getDefaultVideoItems_andRender(tabObj, apiUrl, firstLoading) {
-            $('#' + tabObj['showPaneId']).addClass('loading');
-            $.get(apiUrl, function (res) {
-                // 將拿到的 items 合併到 gAllVideoItems 儲存
-                tabObj['videoItems'] = tabObj['videoItems'].concat(res.items)
+           
+            $.ajax({
+                type: "GET",
+                url: apiUrl,
+                beforeSend: function(){
+                    $('#' + tabObj['showPaneId']).addClass('loading');
+                },
+                error: function (xhr, statusText) {
+                    let errTxt = xhr.responseJSON.error.code + ': ' + xhr.responseJSON.error.errors[0].message
+                    $('#' + tabObj['showPaneId']).html(errTxt)
+                },
+                success: function (res) {
+                    // 將拿到的 items 合併到 defaultObj.videoItems 儲存
+                    tabObj['videoItems'] = tabObj['videoItems'].concat(res.items)
 
-                // 配合100筆
-                if (firstLoading) {
-                    let nextPageToken = res.nextPageToken ? res.nextPageToken : false
-                    let newUrl = tabObj.api + '&pageToken=' + nextPageToken
-                    getDefaultVideoItems_andRender(tabObj, newUrl)
-                } else {
-                    console.log(tabObj['videoItems'])
-                    render_VideoPane(tabObj, 1)
+                    // 配合100筆
+                    if (firstLoading) {
+                        let nextPageToken = res.nextPageToken ? res.nextPageToken : false
+                        let newUrl = tabObj.api + '&pageToken=' + nextPageToken
+                        getDefaultVideoItems_andRender(tabObj, newUrl)
+                    } else {
+                        console.log(tabObj['videoItems'])
+                        render_VideoPane(tabObj, 1)
+                    }
+                },
+                complete: function () {
                     $('#' + tabObj['showPaneId']).removeClass('loading');
                 }
-            })
+            });
         }
 
         function getCollectVideoItems_andRender(tabObj) {
-            $('#' + tabObj['showPaneId']).addClass('loading');
             tabObj.api = getCollectAPI()
-            $.get(tabObj.api, function (res) {
-                tabObj['videoItems'] = res.items;
-                console.log(tabObj['videoItems'])
-                render_VideoPane(tabObj, 1)
-                $('#' + tabObj['showPaneId']).removeClass('loading');
-            })
+            $.ajax({
+                type: "GET",
+                url: tabObj.api,
+                beforeSend: function(){
+                    $('#' + tabObj['showPaneId']).addClass('loading');
+                },
+                error: function (xhr, statusText) {
+                    let errTxt = xhr.responseJSON.error.code + ': ' + xhr.responseJSON.error.errors[0].message
+                    $('#' + tabObj['showPaneId']).html(errTxt)
+                },
+                success: function (res) {
+                    tabObj['videoItems'] = res.items;
+                    console.log(tabObj['videoItems'])
+                    render_VideoPane(tabObj, 1)
+                    $('#' + tabObj['showPaneId']).removeClass('loading');
+                },
+                complete: function () {
+                    $('#' + tabObj['showPaneId']).removeClass('loading');
+                }
+            });
         }
 
         // 回傳html -- 視頻清單
@@ -228,10 +255,10 @@
             }
 
             function add_p(o) {
-                if (o.hasAdd === true) { return o } 
+                if (o.hasAdd === true) { return o }
 
                 if (o.stat === 'minus') {
-                    
+
                     if (nowPage - (nowPage - o.min + 1) >= minPage) { //成功左加
                         o.hasAdd = true;
                         o.min = nowPage - (nowPage - o.min + 1);
@@ -239,7 +266,7 @@
                     o.stat = 'plus';
 
                 } else if (o.stat === 'plus') {
-                    
+
                     if (nowPage - (nowPage - o.max - 1) <= maxPage) { //成功右加
                         o.hasAdd = true;
                         o.max = nowPage - (nowPage - o.max - 1);
@@ -278,7 +305,7 @@
             $('#' + tabObj.showPaneId + ' > .pagination').html(video_default_pagination);
         }
 
-        // 按下收藏按紐時
+        // 按下收藏按紐時，加入或移除至 localStorage
         function clickCollect(self) {
             let vid = $(self).closest('.video_card').attr('id')
             let ls = localStorage.getItem('collectId')
@@ -308,6 +335,7 @@
             localStorage.setItem('collectId', JSON.stringify(ls))
         }
 
+        // 將IOS格式轉成時間。 例: PT3M5S 轉 3:05
         function convertISO8601ToTime(input) {
             var reg = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/;
             var hours = '', minutes = '0:', seconds = '', time;
@@ -329,7 +357,7 @@
             return time;
         }
 
-        // tab切換
+        // tab切換內容功能
         function tab() {
             $('.tab-btn').on('click', function () {
                 let target = $(this).attr('tab-target');
